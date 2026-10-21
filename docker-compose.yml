@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pravah-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pravah
+      POSTGRES_PASSWORD: pravah
+      POSTGRES_DB: pravah_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: pravah-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: pravah-mailpit
+    restart: unless-stopped
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: pravah-api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: "postgresql://pravah:pravah@postgres:5432/pravah_db?schema=public"
+      REDIS_URL: "redis://redis:6379"
+      PORT: 4000
+      DEMO_MODE: "true"
+      JWT_SECRET: "pravah-sih-2026-jwt-super-secret-key-32chars"
+    ports:
+      - "4000:4000"
+    depends_on:
+      - postgres
+      - redis
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: pravah-web
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: "http://localhost:4000/api/v1"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  redisdata:

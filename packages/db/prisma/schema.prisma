@@ -1,0 +1,557 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ───────────── Enums ─────────────
+enum Role {
+  INSTITUTION_ADMIN
+  SCRUTINY_OFFICER
+  EVC_MEMBER
+  SAC_SHC_MEMBER
+  REGIONAL_OFFICER
+  BUREAU_OFFICER
+  BUREAU_HEAD
+  AUDITOR
+  SYSTEM_ADMIN
+}
+
+enum ActorType {
+  USER
+  SYSTEM
+}
+
+enum ApplicationType {
+  NEW_INSTITUTION
+  EXTENSION_OF_APPROVAL
+  INCREASE_IN_INTAKE
+  NEW_COURSE
+  NEW_PROGRAM_OR_LEVEL
+  CHANGE_OF_SITE
+  CLOSURE
+  OTHER
+}
+
+enum ApplicationStatus {
+  IN_PROGRESS
+  WITH_INSTITUTION
+  APPROVED
+  APPROVED_WITH_UNDERTAKING
+  REJECTED
+  WITHDRAWN
+}
+
+enum SlaState {
+  GREEN
+  AMBER
+  RED
+  CRITICAL
+  PAUSED
+}
+
+enum EvcMode {
+  PHYSICAL
+  ONLINE
+  HYBRID
+}
+
+enum EvcStatus {
+  QUEUED
+  SCHEDULED
+  COMPLETED
+  OVERDUE_ESCALATED
+  CANCELLED
+}
+
+enum ComplianceStatus {
+  PENDING_SUBMISSION
+  SUBMITTED_UNDER_REVIEW
+  VERIFIED_COMPLIANT
+  DEFICIENT_REVERTED
+  OVERDUE_ESCALATED
+  BREACHED_ESCALATED
+  EXTENSION_REQUESTED
+  CLOSED
+}
+
+enum DocStatus {
+  VALID
+  EXPIRING
+  EXPIRED
+  RENEWAL_SUBMITTED
+  RENEWED
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  SMS
+  WHATSAPP
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  READ
+  DEAD_LETTER
+}
+
+enum SignatureMethod {
+  TOTP_STEP_UP
+  ESIGN
+  DSC
+}
+
+enum ScanStatus {
+  PENDING
+  CLEAN
+  INFECTED
+  FAILED
+}
+
+enum SummaryStatus {
+  DRAFT
+  FINALISED
+}
+
+// ───────────── Organisation & Identity ─────────────
+model Region {
+  id           String            @id @default(uuid())
+  code         String            @unique
+  name         String
+  users        User[]
+  institutions Institution[]
+  applications Application[]
+  holidays     HolidayCalendar[]
+}
+
+model User {
+  id                   String               @id @default(uuid())
+  name                 String
+  email                String               @unique
+  passwordHash         String?
+  role                 Role
+  designation          String?
+  regionId             String?
+  region               Region?              @relation(fields: [regionId], references: [id])
+  institutionId        String?
+  institution          Institution?         @relation(fields: [institutionId], references: [id])
+  preferredLang        String               @default("en")
+  totpSecretEnc        String?
+  isActive             Boolean              @default(true)
+  delegatedToId        String?
+  delegationEnds       DateTime?
+  createdAt            DateTime             @default(now())
+  assignedApplications Application[]        @relation("AssignedOfficer")
+  committeeMemberships EvcCommitteeMember[]
+  notifications        Notification[]
+}
+
+model Institution {
+  id               String            @id @default(uuid())
+  aictePermanentId String            @unique
+  name             String
+  state            String
+  district         String?
+  institutionType  String
+  regionId         String
+  region           Region            @relation(fields: [regionId], references: [id])
+  complianceHealth String            @default("GOOD")
+  complianceScore  Float?
+  users            User[]
+  applications     Application[]
+  undertakings     Undertaking[]
+  documents        TrackedDocument[]
+}
+
+model HolidayCalendar {
+  id       String   @id @default(uuid())
+  date     DateTime @db.Date
+  label    String
+  regionId String?
+  region   Region?  @relation(fields: [regionId], references: [id])
+
+  @@unique([date, regionId])
+}
+
+// ───────────── Configuration (Handbook-as-data) ─────────────
+model WorkflowDefinition {
+  id            String        @id @default(uuid())
+  code          String
+  version       Int
+  academicYear  String
+  name          String
+  definition    Json
+  isActive      Boolean       @default(false)
+  effectiveFrom DateTime
+  supersededAt  DateTime?
+  createdById   String
+  createdAt     DateTime      @default(now())
+  applications  Application[]
+  slaPolicies   SlaPolicy[]
+
+  @@unique([code, version])
+}
+
+model RoutingRule {
+  id         String  @id @default(uuid())
+  priority   Int
+  name       String
+  conditions Json
+  trackCode  String
+  isActive   Boolean @default(true)
+}
+
+model SlaPolicy {
+  id                   String              @id @default(uuid())
+  workflowDefinitionId String
+  workflowDefinition   WorkflowDefinition  @relation(fields: [workflowDefinitionId], references: [id])
+  stageKey             String
+  applicationType      ApplicationType?
+  durationWorkingDays  Int
+  warnPct              Int                 @default(75)
+  breachPct            Int                 @default(100)
+  criticalPct          Int                 @default(125)
+
+  @@unique([workflowDefinitionId, stageKey, applicationType])
+}
+
+model EscalationRule {
+  id           String                @id @default(uuid())
+  scope        String
+  level        Int
+  triggerType  String
+  triggerValue Int
+  targetRole   Role
+  channels     NotificationChannel[]
+  templateCode String
+  isActive     Boolean               @default(true)
+
+  @@unique([scope, level, triggerType, triggerValue])
+}
+
+model DocType {
+  code             String   @id
+  label            String
+  hasExpiry        Boolean  @default(true)
+  minValidityYears Int?
+  reminderOffsets  Int[]
+  requiredAtStages String[]
+}
+
+model ReasonCode {
+  code     String  @id
+  label    String
+  category String
+  isActive Boolean @default(true)
+}
+
+// ───────────── Core Workflow ─────────────
+model Application {
+  id                    String                    @id @default(uuid())
+  applicationNumber     String                    @unique
+  institutionId         String
+  institution           Institution               @relation(fields: [institutionId], references: [id])
+  regionId              String
+  region                Region                    @relation(fields: [regionId], references: [id])
+  academicYear          String
+  applicationType       ApplicationType
+  isNewInstitution      Boolean                   @default(false)
+  workflowDefinitionId  String
+  workflowDefinition    WorkflowDefinition        @relation(fields: [workflowDefinitionId], references: [id])
+  trackAssignmentReason String?
+  currentStage          String
+  status                ApplicationStatus         @default(IN_PROGRESS)
+  stageEnteredAt        DateTime
+  stageSlaDeadline      DateTime?
+  slaPausedAt           DateTime?
+  slaPausedTotalSec     Int                       @default(0)
+  slaState              SlaState                  @default(GREEN)
+  escalationLevel       Int                       @default(0)
+  nextAlertAt           DateTime?
+  assignedOfficerId     String?
+  assignedOfficer       User?                     @relation("AssignedOfficer", fields: [assignedOfficerId], references: [id])
+  version               Int                       @default(1)
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+  stageHistory          ApplicationStageHistory[]
+  deficiencies          Deficiency[]
+  evcSchedules          EvcSchedule[]
+  undertakings          Undertaking[]
+  caseSummaries         CaseSummary[]
+  auditLogs             AuditLog[]
+
+  @@index([regionId, currentStage, slaState])
+  @@index([nextAlertAt])
+  @@index([assignedOfficerId, slaState])
+}
+
+model ApplicationStageHistory {
+  id             String       @id @default(uuid())
+  applicationId  String
+  application    Application  @relation(fields: [applicationId], references: [id])
+  stageKey       String
+  enteredAt      DateTime
+  exitedAt       DateTime?
+  slaDeadline    DateTime?
+  pausedTotalSec Int          @default(0)
+  actorId        String?
+  actionTaken    String?
+  slaStateAtExit SlaState?
+
+  @@index([applicationId, enteredAt])
+}
+
+model Deficiency {
+  id            String           @id @default(uuid())
+  applicationId String
+  application   Application      @relation(fields: [applicationId], references: [id])
+  raisedById    String
+  reasonCode    String
+  remarks       String
+  raisedAt      DateTime
+  responseDueAt DateTime
+  respondedAt   DateTime?
+  status        String           @default("OPEN")
+  nextAlertAt   DateTime?
+  items         DeficiencyItem[]
+}
+
+model DeficiencyItem {
+  id           String        @id @default(uuid())
+  deficiencyId String
+  deficiency   Deficiency    @relation(fields: [deficiencyId], references: [id])
+  description  String
+  resolved     Boolean       @default(false)
+  responses    FileVersion[]
+}
+
+// ───────────── EVC ─────────────
+model EvcSchedule {
+  id                 String               @id @default(uuid())
+  applicationId      String
+  application        Application          @relation(fields: [applicationId], references: [id])
+  mode               EvcMode              @default(PHYSICAL)
+  constitutedBy      String               @default("COUNCIL")
+  queuedAt           DateTime
+  priorityScore      Float                @default(0)
+  priorityBreakdown  Json?
+  scheduledStart     DateTime?
+  scheduledEnd       DateTime?
+  prescribedDeadline DateTime
+  reportDueAt        DateTime?
+  reportSubmittedAt  DateTime?
+  rescheduleCount    Int                  @default(0)
+  status             EvcStatus            @default(QUEUED)
+  escalationLevel    Int                  @default(0)
+  nextAlertAt        DateTime?
+  members            EvcCommitteeMember[]
+
+  @@index([status, nextAlertAt])
+}
+
+model EvcCommitteeMember {
+  id              String      @id @default(uuid())
+  evcScheduleId   String
+  evcSchedule     EvcSchedule @relation(fields: [evcScheduleId], references: [id])
+  userId          String
+  user            User        @relation(fields: [userId], references: [id])
+  isLead          Boolean     @default(false)
+  conflictChecked Boolean     @default(false)
+  conflictFlag    Boolean     @default(false)
+
+  @@unique([evcScheduleId, userId])
+}
+
+// ───────────── Compliance ─────────────
+model Undertaking {
+  id              String           @id @default(uuid())
+  institutionId   String
+  institution     Institution      @relation(fields: [institutionId], references: [id])
+  applicationId   String
+  application     Application      @relation(fields: [applicationId], references: [id])
+  conditionCode   String
+  conditionTitle  String
+  description     String
+  issuedAt        DateTime
+  dueDate         DateTime
+  originalDueDate DateTime
+  extensionCount  Int              @default(0)
+  status          ComplianceStatus @default(PENDING_SUBMISSION)
+  verifierRole    Role             @default(REGIONAL_OFFICER)
+  verifiedById    String?
+  verifiedAt      DateTime?
+  escalationLevel Int              @default(0)
+  nextAlertAt     DateTime?
+  evidence        FileVersion[]
+  version         Int              @default(1)
+
+  @@index([status, nextAlertAt])
+  @@index([institutionId, dueDate])
+}
+
+model TrackedDocument {
+  id               String        @id @default(uuid())
+  institutionId    String
+  institution      Institution   @relation(fields: [institutionId], references: [id])
+  docTypeCode      String
+  documentNumber   String?
+  issuingAuthority String?
+  issueDate        DateTime?
+  expiryDate       DateTime?
+  status           DocStatus     @default(VALID)
+  currentVersionId String?
+  escalationLevel  Int           @default(0)
+  nextAlertAt      DateTime?
+  versions         FileVersion[]
+
+  @@index([status, nextAlertAt])
+  @@index([institutionId, expiryDate])
+}
+
+model FileVersion {
+  id                   String           @id @default(uuid())
+  versionNo            Int              @default(1)
+  storageKey           String
+  fileName             String
+  mimeType             String
+  sizeBytes            Int
+  sha256               String
+  uploadedById         String
+  uploadedAt           DateTime         @default(now())
+  scanStatus           ScanStatus       @default(CLEAN)
+  extractionProvider   String?
+  extractionJson       Json?
+  extractionConfidence Float?
+  verifiedById         String?
+  verifiedAt           DateTime?
+  overriddenFields     String[]         @default([])
+  trackedDocumentId    String?
+  trackedDocument      TrackedDocument? @relation(fields: [trackedDocumentId], references: [id])
+  undertakingId        String?
+  undertaking          Undertaking?     @relation(fields: [undertakingId], references: [id])
+  deficiencyItemId     String?
+  deficiencyItem       DeficiencyItem?  @relation(fields: [deficiencyItemId], references: [id])
+
+  @@index([sha256])
+}
+
+// ───────────── Notifications ─────────────
+model NotificationTemplate {
+  code    String
+  channel NotificationChannel
+  lang    String
+  subject String?
+  body    String
+  version Int                 @default(1)
+
+  @@id([code, channel, lang])
+}
+
+model Notification {
+  id             String              @id @default(uuid())
+  dedupeKey      String              @unique
+  recipientId    String
+  recipient      User                @relation(fields: [recipientId], references: [id])
+  channel        NotificationChannel
+  templateCode   String
+  payload        Json
+  relatedType    String
+  relatedId      String
+  dueAt          DateTime
+  status         NotificationStatus  @default(PENDING)
+  attempts       Int                 @default(0)
+  dispatchedAt   DateTime?
+  readAt         DateTime?
+  acknowledgedAt DateTime?
+  isCatchUp      Boolean             @default(false)
+  error          String?
+
+  @@index([status, dueAt])
+  @@index([recipientId, readAt])
+}
+
+model OutboxEvent {
+  id          String    @id @default(uuid())
+  type        String
+  payload     Json
+  createdAt   DateTime  @default(now())
+  processedAt DateTime?
+
+  @@index([processedAt, createdAt])
+}
+
+// ───────────── Reports & Summaries ─────────────
+model CaseSummary {
+  id            String        @id @default(uuid())
+  applicationId String
+  application   Application   @relation(fields: [applicationId], references: [id])
+  version       Int
+  status        SummaryStatus @default(DRAFT)
+  storageKey    String
+  contentHash   String
+  generatedAt   DateTime      @default(now())
+  generatedBy   ActorType     @default(SYSTEM)
+  acceptedById  String?
+  finalisedAt   DateTime?
+
+  @@unique([applicationId, version])
+}
+
+// ───────────── Audit (Tamper-Evident Hash Chain) ─────────────
+model AuditLog {
+  id            String           @id @default(uuid())
+  streamKey     String
+  seq           Int
+  applicationId String?
+  application   Application?     @relation(fields: [applicationId], references: [id])
+  actorType     ActorType
+  actorId       String?
+  actorRole     Role?
+  actionType    String
+  entityType    String
+  entityId      String
+  previousState String?
+  newState      String?
+  remarks       String?
+  payload       Json
+  payloadHash   String
+  prevHash      String
+  hash          String           @unique
+  createdAt     DateTime         @default(now())
+  signature     ActionSignature?
+
+  @@unique([streamKey, seq])
+  @@index([applicationId, createdAt])
+}
+
+model ActionSignature {
+  id           String          @id @default(uuid())
+  auditLogId   String          @unique
+  auditLog     AuditLog        @relation(fields: [auditLogId], references: [id])
+  userId       String
+  method       SignatureMethod
+  signedAt     DateTime
+  challengeRef String?
+}
+
+model AuditAnchor {
+  id          String   @id @default(uuid())
+  anchorDate  DateTime @unique @db.Date
+  rootHash    String
+  streamCount Int
+  createdAt   DateTime @default(now())
+}
+
+// ───────────── Demo Support ─────────────
+model SystemClock {
+  id            Int      @id @default(1)
+  offsetSeconds Int      @default(0)
+  demoMode      Boolean  @default(true)
+  updatedAt     DateTime @updatedAt
+}

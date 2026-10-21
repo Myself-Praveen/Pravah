@@ -1,0 +1,20 @@
+{
+  "name": "pravah-aicte-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PRAVAH-AICTE: Platform for Regulatory Approval, Vigilance, Automation & Handbook Compliance",
+  "scripts": {
+    "dev": "pnpm --filter @pravah/api dev & pnpm --filter @pravah/web dev",
+    "dev:api": "pnpm --filter @pravah/api dev",
+    "dev:web": "pnpm --filter @pravah/web dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "db:generate": "pnpm --filter @pravah/db prisma:generate",
+    "db:push": "pnpm --filter @pravah/db prisma db push",
+    "db:seed": "pnpm --filter @pravah/db prisma:seed"
+  },
+  "packageManager": "pnpm@11.5.2",
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

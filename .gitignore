@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+*/node_modules/
+*/*/node_modules/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+apps/*/.env*
+!apps/*/.env.example
+packages/*/.env*
+!packages/*/.env.example
+!.env.example
+
+# Next.js build output
+.next/
+out/
+apps/web/.next/
+apps/web/out/
+
+# Build artifacts
+dist/
+build/
+*.tsbuildinfo
+
+# Logs & Runtime
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test / Coverage
+coverage/
+.nyc_output/
+
+# Temporary & system generated
+.system_generated/
+tmp/
+temp/
