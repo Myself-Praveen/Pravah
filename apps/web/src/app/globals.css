@@ -5,6 +5,8 @@
 :root {
   --background: #f8fafc;
   --foreground: #0f172a;
+  --primary: #1e3a8a;
+  --accent: #2563eb;
 }
 
 body {
@@ -12,26 +14,74 @@ body {
   background: var(--background);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 /* Custom scrollbars */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: #f1f5f9;
-}
-::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
-}
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: #f1f5f9; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
 .glass-panel {
   background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(8px);
   border: 1px solid rgba(226, 232, 240, 0.8);
 }
+
+.tricolor-strip {
+  background: linear-gradient(90deg, #FF9933 0%, #FF9933 33.33%, #FFFFFF 33.33%, #FFFFFF 66.66%, #138808 66.66%, #138808 100%);
+  height: 4px;
+}
+
+.gov-pattern {
+  background-image: radial-gradient(circle at 1px 1px, rgba(30,58,138,0.04) 1px, transparent 0);
+  background-size: 24px 24px;
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-aicte-blue text-white font-semibold text-sm shadow-sm hover:bg-aicte-accent active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-white text-slate-700 font-semibold text-sm border border-slate-300 shadow-sm hover:bg-slate-50 active:scale-95 transition-all;
+  }
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-rose-600 text-white font-semibold text-sm shadow-sm hover:bg-rose-700 active:scale-95 transition-all;
+  }
+  .card {
+    @apply bg-white rounded-2xl border border-slate-200 shadow-card;
+  }
+  .card-elevated {
+    @apply bg-white rounded-2xl border border-slate-200 shadow-elevated;
+  }
+  .input {
+    @apply w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-aicte-accent focus:border-aicte-accent focus:outline-none transition-all;
+  }
+  .label {
+    @apply block text-xs font-semibold text-slate-700 mb-1 uppercase tracking-wide;
+  }
+  .page-header-title {
+    @apply text-2xl sm:text-3xl font-black text-slate-900 tracking-tight;
+  }
+  .section-title {
+    @apply text-sm font-bold text-slate-900 uppercase tracking-wider;
+  }
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border;
+  }
+  .table-base {
+    @apply w-full text-left text-xs;
+  }
+  .table-head {
+    @apply bg-slate-100/75 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-[10px];
+  }
+  .table-row {
+    @apply border-b border-slate-100 hover:bg-slate-50 transition-colors;
+  }
+}
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+.animate-spin-slow { animation: spin 3s linear infinite; }

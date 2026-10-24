@@ -1,209 +1,107 @@
 'use client';
 
-import React, { useState } from 'react';
-import {
-  Sliders,
-  Plus,
-  CheckCircle2,
-  AlertTriangle,
-  RotateCcw,
-  Sparkles,
-  GitBranch,
-  Save,
-  Eye,
-  Calendar,
-} from 'lucide-react';
-import { ALL_STANDARD_DEFINITIONS } from '@pravah/workflow';
+import React, { useState, useEffect } from 'react';
+import { API_BASE } from '@/lib/api';
+import { Sliders, FileText, GitBranch, AlertTriangle, Save, Plus, Trash2, Settings, Layers } from 'lucide-react';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { LoadingSpinner } from '@/components/ui/EmptyState';
 
-export default function PolicyConfiguratorPage() {
-  const [selectedTrack, setSelectedTrack] = useState<string>('SCRUTINY_PLUS_EVC');
-  const [scrutinySla, setScrutinySla] = useState<number>(7);
-  const [dryRunMessage, setDryRunMessage] = useState<string | null>(null);
-  const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
+export default function AdminPage() {
+  const [activeTab, setActiveTab] = useState<'workflow' | 'sla' | 'fees' | 'calendar'>('workflow');
+  const [loading, setLoading] = useState(false);
 
-  // Custom Track Creator State (Demo Step 2: "add custom track without redeploy")
-  const [customTrackCode, setCustomTrackCode] = useState('SPECIAL_AUTONOMOUS_TRACK');
-  const [customTrackName, setCustomTrackName] = useState('Autonomous Institutions Accelerated Approval Track');
-  const [createdTracks, setCreatedTracks] = useState<string[]>([]);
-
-  const handleSlaChange = (newVal: number) => {
-    setScrutinySla(newVal);
-    if (newVal < 7) {
-      setDryRunMessage(`Dry-Run Impact Simulation: Reducing Scrutiny SLA from 7 to ${newVal} working days would transition 14 currently active dossiers to Amber warning today.`);
-    } else {
-      setDryRunMessage(`Dry-Run Impact Simulation: Relaxing Scrutiny SLA to ${newVal} working days maintains all active dossiers within green threshold.`);
-    }
-  };
-
-  const handleSavePolicy = () => {
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 5000);
-  };
-
-  const handleCreateCustomTrack = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (customTrackCode.trim()) {
-      setCreatedTracks([...createdTracks, customTrackCode.trim()]);
-      setSavedSuccess(true);
-      setTimeout(() => setSavedSuccess(false), 5000);
-    }
-  };
+  const tabs = [
+    { id: 'workflow', label: 'Workflow Configurator', icon: GitBranch },
+    { id: 'sla', label: 'SLA Matrix', icon: ClockIcon },
+    { id: 'fees', label: 'Fee Structure', icon: FileText },
+    { id: 'calendar', label: 'Academic Calendar', icon: CalendarIcon },
+  ];
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
-              Handbook-as-Data
-            </span>
-            <span className="text-xs text-slate-400">• APH Policy Configurator</span>
-          </div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight mt-1">
-            No-Code APH Policy & Workflow Configurator
-          </h1>
-          <p className="text-xs text-slate-500">
-            When APH changes annually, AICTE updates versioned JSON configuration with zero code deployment or server restart.
-          </p>
-        </div>
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="Module A"
+        title="Policy Configurator (No-Code APH)"
+        description="Versioned JSON statecharts, SLA matrices, fee structures and academic calendar — annual APH changes without code deploys."
+        badge="System Admin View"
+        actions={
+          <button className="btn-primary"><Save className="w-4 h-4" /> Publish Version</button>
+        }
+      />
+
+      <div className="flex gap-2 border-b border-slate-200 overflow-x-auto no-scrollbar">
+        {tabs.map((t) => {
+          const Icon = t.icon;
+          return (
+            <button
+              key={t.id}
+              onClick={() => setActiveTab(t.id as any)}
+              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition-colors whitespace-nowrap ${
+                activeTab === t.id ? 'border-aicte-accent text-aicte-accent' : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Icon className="w-3.5 h-3.5" /> {t.label}
+            </button>
+          );
+        })}
       </div>
 
-      {savedSuccess && (
-        <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl text-emerald-900 text-xs font-semibold flex items-center gap-2 animate-fade-in shadow-sm">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span>Policy configuration updated & versioned in database! Effective immediately across all active instances.</span>
+      {activeTab === 'workflow' && (
+        <div className="card p-6 space-y-4">
+          <h3 className="section-title">APH 2026-27 Workflow States</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {['SUBMITTED', 'SCRUTINY', 'REVERTED', 'EVC_SCHEDULED', 'EVC_COMPLETED', 'SAC_SHC_REVIEW', 'COMPETENT_AUTHORITY_REVIEW', 'APPROVED', 'REJECTED'].map((s) => (
+              <div key={s} className="p-3 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between">
+                <span className="font-mono text-xs font-bold text-slate-800">{s}</span>
+                <Settings className="w-3.5 h-3.5 text-slate-400" />
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
-      {/* Grid: SLA Matrix + Track Designer */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Card 1: Stage SLA Matrix & Dry-Run Impact */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
-          <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-bold text-slate-900">SLA Duration Matrix (Working Days)</h2>
-              <p className="text-xs text-slate-500">Track: {selectedTrack}</p>
-            </div>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
-              Version 3 (Active)
-            </span>
-          </div>
-
-          <div className="space-y-3 text-xs">
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-slate-800">Scrutiny Stage SLA:</span>
-                <span className="font-mono font-bold text-indigo-700 text-sm">{scrutinySla} Working Days</span>
-              </div>
-              <input
-                type="range"
-                min="3"
-                max="15"
-                value={scrutinySla}
-                onChange={(e) => handleSlaChange(parseInt(e.target.value, 10))}
-                className="w-full accent-indigo-600 cursor-pointer"
-              />
-              <div className="flex justify-between text-[10px] text-slate-400 font-mono">
-                <span>3 Days</span>
-                <span>Default: 7 Days</span>
-                <span>15 Days</span>
-              </div>
-            </div>
-
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
-              <div>
-                <span className="font-bold text-slate-800 block">EVC Inspection SLA</span>
-                <span className="text-[10px] text-slate-500">Prescribed window for visit & report</span>
-              </div>
-              <span className="font-mono font-bold text-slate-700">15 Working Days</span>
-            </div>
-
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
-              <div>
-                <span className="font-bold text-slate-800 block">Competent Authority Review</span>
-                <span className="text-[10px] text-slate-500">Statutory approval decision by RO / Bureau</span>
-              </div>
-              <span className="font-mono font-bold text-slate-700">5 Working Days</span>
-            </div>
-
-            {/* Dry Run Banner */}
-            {dryRunMessage && (
-              <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl text-amber-900 text-xs flex items-start gap-2 animate-fade-in">
-                <Sparkles className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <span className="leading-relaxed">{dryRunMessage}</span>
-              </div>
-            )}
-
-            <button
-              onClick={handleSavePolicy}
-              className="w-full py-2 bg-indigo-700 hover:bg-indigo-800 text-white font-semibold rounded-lg flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all"
-            >
-              <Save className="w-4 h-4" /> Save SLA Policy Version & Commit
-            </button>
-          </div>
+      {activeTab === 'sla' && (
+        <div className="card p-6">
+          <h3 className="section-title mb-3">SLA Matrix (Working Days)</h3>
+          <table className="table-base">
+            <thead className="table-head"><tr><th className="p-2">Stage</th><th className="p-2">SLA Days</th><th className="p-2">Escalation L1</th><th className="p-2">Escalation L2</th></tr></thead>
+            <tbody>
+              {[
+                { stage: 'Scrutiny', days: 7, l1: 5, l2: 7 },
+                { stage: 'EVC Scheduling', days: 14, l1: 10, l2: 14 },
+                { stage: 'SAC/SHC Review', days: 10, l1: 7, l2: 10 },
+                { stage: 'Competent Authority', days: 5, l1: 3, l2: 5 },
+              ].map((r) => (
+                <tr key={r.stage} className="table-row">
+                  <td className="p-2 font-mono text-slate-800">{r.stage}</td>
+                  <td className="p-2">{r.days}</td>
+                  <td className="p-2">{r.l1}d</td>
+                  <td className="p-2">{r.l2}d</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
+      )}
 
-        {/* Card 2: Workflow Track Designer */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
-          <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-bold text-slate-900">Custom Approval Track Designer</h2>
-              <p className="text-xs text-slate-500">Add custom APH tracks live without server redeployment</p>
-            </div>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-              Zero-Downtime Engine
-            </span>
-          </div>
-
-          <form onSubmit={handleCreateCustomTrack} className="space-y-3 text-xs">
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">Track Unique Code</label>
-              <input
-                type="text"
-                value={customTrackCode}
-                onChange={(e) => setCustomTrackCode(e.target.value)}
-                className="w-full p-2 border border-slate-300 rounded-lg font-mono text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">Track Description</label>
-              <input
-                type="text"
-                value={customTrackName}
-                onChange={(e) => setCustomTrackName(e.target.value)}
-                className="w-full p-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-              />
-            </div>
-
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-[11px] text-slate-600">
-              <span className="font-bold text-slate-800 block">Automatic Statechart Validator:</span>
-              <div className="flex items-center gap-1.5 text-emerald-700 font-semibold">
-                <CheckCircle2 className="w-3.5 h-3.5" /> All stages reachable from SUBMITTED
-              </div>
-              <div className="flex items-center gap-1.5 text-emerald-700 font-semibold">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Terminal stages (APPROVED, REJECTED) defined
-              </div>
-              <div className="flex items-center gap-1.5 text-emerald-700 font-semibold">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Statutory guards bound to REGIONAL_OFFICER role
-              </div>
-            </div>
-
-            {createdTracks.length > 0 && (
-              <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-900 text-xs">
-                <strong>Active Custom Tracks:</strong> {createdTracks.join(', ')}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all"
-            >
-              <Plus className="w-4 h-4" /> Activate Custom Track in Production
-            </button>
-          </form>
+      {activeTab === 'fees' && (
+        <div className="card p-6 space-y-3">
+          <h3 className="section-title">Fee Structure</h3>
+          <p className="text-xs text-slate-500">Configurable fee slabs per institution category and program type.</p>
+          <button className="btn-secondary text-xs"><Plus className="w-3.5 h-3.5" /> Add Slab</button>
         </div>
-      </div>
+      )}
+
+      {activeTab === 'calendar' && (
+        <div className="card p-6 space-y-3">
+          <h3 className="section-title">Academic Calendar</h3>
+          <p className="text-xs text-slate-500">Working-day exclusions, holidays and APH milestones.</p>
+          <button className="btn-secondary text-xs"><Plus className="w-3.5 h-3.5" /> Add Holiday</button>
+        </div>
+      )}
     </div>
   );
 }
+
+function ClockIcon(props: any) { return <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>; }
+function CalendarIcon(props: any) { return <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>; }
